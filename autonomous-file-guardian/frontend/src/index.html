@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Autonomous File Guardian</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        /* VAULT LOCK SCREEN STYLES */
+        .vault-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            z-index: 9999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            animation: fadeInVault 0.5s ease-out forwards;
+        }
+        
+        .vault-box {
+            background: rgba(30, 41, 59, 0.95);
+            padding: 48px;
+            border-radius: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
+            width: 420px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            animation: slideUpVault 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        .vault-icon {
+            width: 64px;
+            height: 64px;
+            color: var(--accent-primary);
+            margin-bottom: 24px;
+            filter: drop-shadow(0 0 10px rgba(139, 92, 246, 0.3));
+            animation: floatIcon 3s ease-in-out infinite;
+        }
+
+        .vault-input {
+            width: 100%;
+            padding: 14px 16px;
+            margin: 24px 0;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            border-radius: 12px;
+            font-size: 16px;
+            text-align: center;
+            letter-spacing: 1px;
+            transition: all 0.3s;
+        }
+
+        .vault-input:focus {
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.15);
+            outline: none;
+            transform: scale(1.02);
+        }
+
+        #btn-unlock-vault {
+            width: 100%;
+            padding: 16px 24px;
+            background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #btn-unlock-vault::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        #btn-unlock-vault:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4);
+        }
+
+        #btn-unlock-vault:hover::before {
+            left: 100%;
+        }
+
+        #btn-unlock-vault:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+        }
+
+        #btn-unlock-vault:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        #vault-error {
+            margin-top: 16px;
+            padding: 12px;
+            background: rgba(239, 68, 68, 0.1);
+            border-left: 3px solid #ef4444;
+            border-radius: 8px;
+            color: #ef4444;
+            font-size: 14px;
+            animation: shakeError 0.5s ease-in-out;
+        }
+
+        @keyframes fadeInVault {
+            from { opacity: 0; backdrop-filter: blur(0px); }
+            to { opacity: 1; backdrop-filter: blur(15px); }
+        }
+
+        @keyframes slideUpVault {
+            from { opacity: 0; transform: translateY(30px) scale(0.95); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        @keyframes floatIcon {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+
+        @keyframes shakeError {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- VAULT LOCK SCREEN OVERLAY -->
+    <div id="vault-lock-screen" class="vault-overlay" style="display: none;">
+        <div class="vault-box">
+            <svg class="vault-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+            <h2 id="vault-title">File Guardian Vault</h2>
+            <p id="vault-desc" style="color: var(--text-muted); margin-bottom: 20px;">Enter Master Password to Unlock</p>
+            
+            <input type="password" id="vault-password" class="vault-input" placeholder="Master Password">
+            <button id="btn-unlock-vault" class="btn-primary" style="width: 100%;">Unlock Vault</button>
+            <div id="vault-error" style="color: var(--error); margin-top: 15px; display: none;"></div>
+        </div>
+    </div>
+
+    <!-- MAIN APP -->
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="logo">
+                <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                </svg>
+                <h1>File Guardian</h1>
+            </div>
+            
+            <nav class="nav-menu">
+                <button class="nav-item active" data-view="encrypt">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                    <span>Encrypt</span>
+                </button>
+                
+                <button class="nav-item" data-view="files">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                        <polyline points="13 2 13 9 20 9"></polyline>
+                    </svg>
+                    <span>Protected Files</span>
+                </button>
+                
+                <button class="nav-item" data-view="logs">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                    </svg>
+                    <span>Activity Logs</span>
+                </button>
+                
+                <button class="nav-item" data-view="recovery">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path d="M23 4v6h-6"></path>
+                        <path d="M1 20v-6h6"></path>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                    </svg>
+                    <span>Recovery</span>
+                </button>
+                
+                <button class="nav-item" data-view="settings">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M12 1v6m0 6v6m6-12v6m0 6v6m-12-18v6m0 6v6"></path>
+                    </svg>
+                    <span>Settings</span>
+                </button>
+
+                <!-- LOCK BUTTON -->
+                <button class="nav-item" id="btn-lock-app" style="margin-top: auto; color: var(--error);">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                    <span>Lock Vault</span>
+                </button>
+            </nav>
+            
+            <div class="sidebar-footer">
+                <div class="guardian-status">
+                    <div class="status-indicator">
+                        <span class="status-dot"></span>
+                        <span>Backend Connected</span>
+                    </div>
+                    
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <div id="encrypt-view" class="view active">
+                <div class="view-header">
+                    <h2>Encrypt Files or Folders</h2>
+                    <p>Files are encrypted at their original location and monitored by Guardian</p>
+                </div>
+
+                <div class="info-banner">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="16" x2="12" y2="12"></line>
+                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                    </svg>
+                    <div>
+                        <strong>How it works:</strong> Files are encrypted at their original location. 
+                        Guardian monitors for moves, renames, deletions, and permission changes. 
+                        If deleted from file system, content is backed up to database.
+                    </div>
+                </div>
+
+                <div class="encrypt-container">
+                    <div class="selection-cards">
+                        <div class="selection-card">
+                            <div class="card-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                                    <polyline points="13 2 13 9 20 9"></polyline>
+                                </svg>
+                            </div>
+                            <h3>Select File</h3>
+                            <p>Encrypt a single file in place</p>
+                            <button class="btn-primary" id="btn-select-file">Choose File</button>
+                        </div>
+
+                        <div class="selection-card">
+                            <div class="card-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                                </svg>
+                            </div>
+                            <h3>Select Folder</h3>
+                            <p>Encrypt all files in folder</p>
+                            <button class="btn-primary" id="btn-select-folder">Choose Folder</button>
+                        </div>
+                    </div>
+
+                    <div class="encrypt-form" id="encrypt-form" style="display: none;">
+                        <div class="form-group">
+                            <label>Selected Path</label>
+                            <div class="path-display" id="selected-path">No selection</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="master-key">Master Key</label>
+                            <input type="password" id="master-key" placeholder="Enter a strong master key" required>
+                            <small>⚠️ This key encrypts your files. Keep it safe!</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="use-canary">
+                                <span>Embed Canary Token (Track if file is shared)</span>
+                            </label>
+                            <small id="canary-status">Configure canary token in Settings</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="use-2fa">
+                                <span>Require 2FA Code to Decrypt</span>
+                            </label>
+                            <small id="2fa-status-text">Enable 2FA in Settings first</small>
+                        </div>
+
+                        <div class="form-actions">
+                            <button class="btn-secondary" id="btn-cancel">Cancel</button>
+                            <button class="btn-encrypt" id="btn-encrypt">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                                </svg>
+                                Encrypt Now
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="progress-container" id="progress-container" style="display: none;">
+                        <div class="progress-icon">
+                            <div class="spinner"></div>
+                        </div>
+                        <h3>Encrypting...</h3>
+                        <p id="progress-message">Protecting your files with military-grade encryption</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="files-view" class="view">
+                <div class="view-header">
+                    <h2>Protected Files</h2>
+                    <p>Manage encrypted files - Guardian monitors for suspicious activity</p>
+                </div>
+
+                <div class="filter-bar">
+                    <button class="filter-btn active" data-filter="active">Active Files</button>
+                    <button class="filter-btn" data-filter="deleted">Deleted (Backed Up)</button>
+                    <button class="filter-btn" data-filter="all">All Files</button>
+                </div>
+
+                <div class="files-container">
+                    <div class="files-list" id="files-list">
+                        <div class="loading">Loading files...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="logs-view" class="view">
+                <div class="view-header">
+                    <h2>Activity Logs</h2>
+                    <p>Real-time monitoring of all file operations and security events</p>
+                </div>
+
+                <div class="stats-grid" id="stats-grid">
+                    <div class="loading">Loading dashboard stats...</div>
+                </div>
+
+                <div class="filter-bar">
+                    <button class="filter-btn active" data-severity="all">All Logs</button>
+                    <button class="filter-btn" data-severity="critical">Critical</button>
+                    <button class="filter-btn" data-severity="alert">Alerts</button>
+                    <button class="filter-btn" data-severity="warning">Warnings</button>
+                    <button class="filter-btn" data-severity="info">Info</button>
+                </div>
+
+                <div class="logs-container">
+                    <div class="logs-list" id="logs-list">
+                        <div class="loading">Loading logs...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="recovery-view" class="view">
+                <div class="view-header">
+                    <h2>Disaster Recovery</h2>
+                    <p>Scan the Blockchain to find files missing from your local database</p>
+                </div>
+
+                <div class="info-banner" style="background: rgba(234, 179, 8, 0.1); border-color: rgba(234, 179, 8, 0.3); color: #facc15;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                        <line x1="12" y1="9" x2="12" y2="13"></line>
+                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                    </svg>
+                    <div>
+                        <strong>Use this when:</strong> Your database was corrupted, deleted, or you moved to a new computer. 
+                        This pulls the permanent record from the Blockchain and downloads the file from IPFS.
+                    </div>
+                </div>
+
+                <div class="recovery-actions" style="margin-top: 20px; margin-bottom: 20px;">
+                    <button class="btn-primary" id="btn-scan-blockchain">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        Scan Blockchain
+                    </button>
+                </div>
+
+                <div class="recovery-container">
+                    <div id="recovery-list" class="files-list">
+                        <div class="empty-state">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            <h3>Scan for Lost Files</h3>
+                            <p>Click "Scan Blockchain" to compare local data with the immutable ledger.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="settings-view" class="view">
+                <div class="view-header">
+                    <h2>Settings</h2>
+                    <p>Configure canary tokens and application preferences</p>
+                </div>
+
+                <div class="settings-container">
+                    <div class="settings-section">
+                        <div class="section-header">
+                            <h3>🔐 Two-Factor Authentication</h3>
+                            <p>Require a code from your phone to decrypt sensitive files.</p>
+                        </div>
+                        
+                        <div id="2fa-setup-container">
+                            <p id="2fa-status-msg">2FA is currently disabled.</p>
+                            <button class="btn-primary" id="btn-setup-2fa">Enable 2FA</button>
+                        </div>
+
+                        <div id="qr-display" style="display: none; text-align: center; margin-top: 20px;">
+                            <p>Scan this with Google Authenticator:</p>
+                            <img id="qr-image" src="" style="width: 200px; height: 200px; border: 4px solid white;">
+                            <div class="form-group" style="margin-top: 15px;">
+                                <input type="text" id="verify-2fa-code" placeholder="Enter code from app" style="width: 150px; text-align: center;">
+                            </div>
+                            <button class="btn-success" id="btn-confirm-2fa">Verify & Enable</button>
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <div class="section-header">
+                            <h3>🕵️ Canary Token Configuration</h3>
+                            <p>Embed canary tokens in encrypted files to track unauthorized sharing</p>
+                        </div>
+
+                        <div class="info-banner" style="margin-bottom: 24px;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="16" x2="12" y2="12"></line>
+                                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                            </svg>
+                            <div>
+                                <strong>What are Canary Tokens?</strong><br>
+                                Canary tokens are hidden tracking URLs embedded in files. When someone shares your 
+                                encrypted file and it gets decrypted elsewhere, the token triggers and alerts you 
+                                with IP address and location data of the unauthorized access.
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="canary-token-url">Canary Token URL</label>
+                            <input type="url" id="canary-token-url" placeholder="https://canarytokens.org/your-token-url">
+                            <small>Get free tokens from <a href="https://canarytokens.org" target="_blank">canarytokens.org</a> or similar services</small>
+                        </div>
+
+                        <div class="form-actions">
+                            <button class="btn-primary" id="btn-save-canary">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                    <polyline points="7 3 7 8 15 8"></polyline>
+                                </svg>
+                                Save Default Token
+                            </button>
+                            <button class="btn-secondary" id="btn-test-canary" style="display: none;">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                                </svg>
+                                Test Token
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <div class="section-header">
+                            <h3>📊 Canary Token Statistics</h3>
+                        </div>
+                        <div id="canary-stats">
+                            <div class="loading">Loading statistics...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <div class="modal" id="decrypt-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Decrypt & Open File</h3>
+                <button class="modal-close" id="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Enter master key to decrypt: <strong id="decrypt-filename"></strong></p>
+                <input type="password" id="decrypt-master-key" placeholder="Enter master key" class="modal-input">
+                
+                <div id="2fa-input-container" style="display: none; margin-top: 15px;">
+                    <p style="color: var(--warning); margin-bottom: 5px;">🔒 2FA Code Required</p>
+                    <input type="text" id="decrypt-2fa-code" placeholder="000 000" class="modal-input" maxlength="6" style="text-align: center; letter-spacing: 2px;">
+                </div>
+
+                <div class="modal-info">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="16" x2="12" y2="12"></line>
+                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                    </svg>
+                    <span>File will be decrypted to temporary location and opened. Original remains encrypted.</span>
+                </div>
+                <div class="device-verification" id="device-verification" style="display: none;">
+                    <div class="verification-status">
+                        <div class="spinner-small"></div>
+                        <span>Verifying device...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="modal-cancel">Cancel</button>
+                <button class="btn-decrypt" id="btn-decrypt">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                    </svg>
+                    Decrypt & Open
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>
